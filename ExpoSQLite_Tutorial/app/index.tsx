@@ -7,11 +7,13 @@ import {
   Text,
   TextInput,
   View,
+  Alert,
 } from "react-native";
-import { fetchItems, insertItem, type Item } from "../data/db";
+import { fetchItems, insertItem, deleteItem,updateItem,type Item, sortAZ } from "../data/db";
 import ItemRow from "./components/ItemRow";
-
+import { Picker } from '@react-native-picker/picker';
 export default function App() {
+
   /**
    * Database Access
    *
@@ -21,6 +23,7 @@ export default function App() {
    */
   const db = useSQLiteContext();
 
+  
   /**
    * Form State
    *
@@ -37,8 +40,23 @@ export default function App() {
    * Stores the items retrieved from the database.
    * When this updates, React re-renders the FlatList to show the new data.
    */
+  const [selectedRecipe, setSelectedRecipe] = useState<number | null>(null);
+  const [sortOption, setSortOption] = useState<string>("name-asc");
   const [items, setItems] = useState<Item[]>([]);
-
+  const sortedItems = [...items].sort((a, b) => {
+  switch (sortOption) {
+    case "name-asc":
+      sortAZ;
+    case "name-desc":
+      return b.name.localeCompare(a.name);
+    case "qty-asc":
+      return a.quantity - b.quantity;
+    case "qty-desc":
+      return b.quantity - a.quantity;
+    default:
+      return 0;
+  }
+});
   /**
    * Load Items on Mount
    *
@@ -110,6 +128,109 @@ export default function App() {
     }
   };
 
+/**
+   * Save or Update Item Function
+   *
+   * Validates user input, then either inserts a new record or updates
+   * an existing record depending on whether `editingId` is null.
+   *
+   * Validation Steps:
+   * 1. Ensure the name is not empty (after trimming whitespace)
+   * 2. Parse quantity as an integer
+   * 3. Ensure quantity is a valid number (not NaN)
+   *
+   * Workflow:
+   * - If no item is being edited (editingId is null), insert a new item.
+   * - If an item is being edited, update that record in the database.
+   *
+   * After successful operation:
+   * - The list of items is refreshed from the database
+   * - Form fields and editing state are cleared
+   *
+   * @returns Promise that resolves when the save or update completes
+   */
+  const saveOrUpdate = async () => {
+    if (!name.trim()) return;
+    const parsedQuantity = parseInt(quantity, 10);
+    if (Number.isNaN(parsedQuantity)) return;
+
+    try {
+      if (editingId === null) {
+        await insertItem(db, name.trim(), parsedQuantity);
+      } else {
+        await updateItem(db, editingId, name.trim(), parsedQuantity);
+      }
+      await loadItems();
+      setName("");
+      setQuantity("");
+      setEditingId(null);
+    } catch (err) {
+      console.log("Failed to save/update item", err);
+    }
+  };
+
+  /**
+   * Start Edit Function
+   *
+   * Prepares the form for editing an existing item.
+   *
+   * When a user taps the "Edit" button, this function:
+   * - Saves the selected item's `id` in state (editingId)
+   * - Populates the input fields (`name` and `quantity`)
+   *   so the user can modify existing values
+   *
+   * Once editing is complete and the user taps "Update Item",
+   * the `saveOrUpdate` function will handle saving the changes.
+   *
+   * @param item - The item object that the user selected to edit
+   * @returns void
+   */
+  const startEdit = (item: Item) => {
+    setEditingId(item.id);
+    setName(item.name);
+    setQuantity(String(item.quantity));
+  };
+
+  /**
+   * Confirm Delete Function
+   *
+   * Displays a confirmation dialog before deleting an item from the database.
+   *
+   * Workflow:
+   * 1. Shows an alert asking the user to confirm deletion.
+   * 2. If the user confirms, deletes the item using its `id`.
+   * 3. Reloads the item list to reflect the change.
+   * 4. If the deleted item was currently being edited, clears the form.
+   *
+   * This confirmation step helps prevent accidental deletions.
+   *
+   * @param id - The unique identifier of the item to delete
+   * @returns void
+   */
+  
+  const confirmDelete = (id: number) => {
+    Alert.alert("Delete item?", "This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteItem(db, id);
+            await loadItems();
+            if (editingId === id) {
+              setEditingId(null);
+              setName("");
+              setQuantity("");
+            }
+          } catch (err) {
+            console.log("Failed to delete item", err);
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>SQLite Example</Text>
@@ -140,8 +261,19 @@ export default function App() {
       */}
       <Button
         title={editingId === null ? "Save Item" : "Update Item"}
-        onPress={saveItem}
+        onPress={saveOrUpdate}
       />
+      <Text style={{ marginTop: 20, fontWeight: "bold" }}>Sort Items:</Text>
+      <Picker
+        selectedValue={sortOption}
+        onValueChange={(itemValue) => setSortOption(itemValue)}
+        style={{ width: "100%", height: 50 }}
+      >
+        <Picker.Item label="Name A-Z" value="name-asc" />
+        <Picker.Item label="Name Z-A" value="name-desc" />
+        <Picker.Item label="Quantity Low-High" value="qty-asc" />
+        <Picker.Item label="Quantity High-Low" value="qty-desc" />
+      </Picker>
       <FlatList
         style={styles.list}
         data={items}
@@ -157,7 +289,12 @@ export default function App() {
           />
         )}
         renderItem={({ item }) => (
-          <ItemRow name={item.name} quantity={item.quantity} />
+          <ItemRow
+            name={item.name}
+            quantity={item.quantity}
+            onEdit={() => startEdit(item)}
+            onDelete={() => confirmDelete(item.id)}
+          />
         )}
         ListEmptyComponent={
           <Text style={{ textAlign: "center", marginTop: 24, color: "#888" }}>
@@ -170,6 +307,7 @@ export default function App() {
             : undefined
         }
       />
+      
     </View>
   );
 }
