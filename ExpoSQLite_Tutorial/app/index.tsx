@@ -9,7 +9,7 @@ import {
   View,
   Alert,
 } from "react-native";
-import { fetchItems, insertItem, deleteItem,updateItem,type Item, sortAZ } from "../data/db";
+import { fetchItems, insertItem, deleteItem,updateItem,type Item, fetchSortedItems } from "../data/db";
 import ItemRow from "./components/ItemRow";
 import { Picker } from '@react-native-picker/picker';
 export default function App() {
@@ -40,23 +40,24 @@ export default function App() {
    * Stores the items retrieved from the database.
    * When this updates, React re-renders the FlatList to show the new data.
    */
-  const [selectedRecipe, setSelectedRecipe] = useState<number | null>(null);
   const [sortOption, setSortOption] = useState<string>("name-asc");
   const [items, setItems] = useState<Item[]>([]);
-  const sortedItems = [...items].sort((a, b) => {
-  switch (sortOption) {
-    case "name-asc":
-      sortAZ;
-    case "name-desc":
-      return b.name.localeCompare(a.name);
-    case "qty-asc":
-      return a.quantity - b.quantity;
-    case "qty-desc":
-      return b.quantity - a.quantity;
-    default:
-      return 0;
-  }
-});
+  
+  // const sortedItems = [...items].sort((a, b) => {
+  //   switch (sortOption) {
+  //     case "name-asc":
+  //       return a.name.localeCompare(b.name);
+  //     case "name-desc":
+  //       return b.name.localeCompare(a.name);
+  //     case "qty-asc":
+  //       return a.quantity - b.quantity;
+  //     case "qty-desc":
+  //       return b.quantity - a.quantity;
+  //     default:
+  //       return 0;
+  //   }
+  // });
+
   /**
    * Load Items on Mount
    *
@@ -84,15 +85,32 @@ export default function App() {
    *
    * @returns Promise that resolves when items are successfully loaded
    */
+  // const loadItems = async () => {
+  //   try {
+  //     const value = await fetchItems(db);
+  //     setItems(value);
+  //   } catch (err) {
+  //     console.log("Failed to fetch items", err);
+  //   }
+  // };
+  useEffect(() => {
+    loadItems();
+  }, [sortOption]);  // <-- dependency on sortOption
+
+  // Update loadItems to use fetchSortedItems and sortOption
   const loadItems = async () => {
     try {
-      const value = await fetchItems(db);
+      // Fetch items sorted from DB based on current sortOption state
+      const value = await fetchSortedItems(db, sortOption as
+        | "name-asc"
+        | "name-desc"
+        | "qty-asc"
+        | "qty-desc");
       setItems(value);
     } catch (err) {
       console.log("Failed to fetch items", err);
     }
   };
-
   /**
    * Save Item Function
    *
@@ -277,6 +295,7 @@ export default function App() {
       <FlatList
         style={styles.list}
         data={items}
+        //data={sortedItems}
         keyExtractor={(item) => item.id.toString()}
         ItemSeparatorComponent={() => (
           <View

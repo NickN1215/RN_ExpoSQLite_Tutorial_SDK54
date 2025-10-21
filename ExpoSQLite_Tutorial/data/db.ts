@@ -128,6 +128,27 @@ export const updateItem = async (
 export const deleteItem = async (db: SQLiteDatabase, id: number): Promise<void> => {
   await db.runAsync("DELETE FROM items WHERE id = ?;", [id]);
 };
-export const sortAZ = async (db: SQLiteDatabase): Promise<Item[]> => {
-  return db.getAllAsync<Item>("SELECT * FROM items ORDER BY name ASC;");
+
+export const fetchSortedItems = async (
+  db: SQLiteDatabase,
+  sortOption: 'name-asc' | 'name-desc' | 'qty-asc' | 'qty-desc'
+): Promise<Item[]> => {
+  let query = "SELECT * FROM items ";
+  switch (sortOption) {
+    case 'name-asc':
+      query += "ORDER BY name ASC;";
+      break;
+    case 'name-desc':
+      query += "ORDER BY name DESC;";
+      break;
+    case 'qty-asc':
+      query += "ORDER BY quantity ASC;";
+      break;
+    case 'qty-desc':
+      query += "ORDER BY quantity DESC;";
+      break;
+    default:
+      query += ";";
+  }
+  return db.getAllAsync<Item>(query);
 };
